@@ -165,8 +165,25 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 		fmt.Printf("[AI-reply] Showing typing and fetching response for %s\n", phone)
 		s.Sender.SendChatPresence(ctx, phone, true)
 
+		// Create a ticker to keep typing status alive (WhatsApp status usually expires after ~10-20s)
+		ticker := time.NewTicker(5 * time.Second)
+		done := make(chan bool)
+		go func() {
+			for {
+				select {
+					case <-ticker.C:
+						s.Sender.SendChatPresence(ctx, phone, true)
+					case <-done:
+						ticker.Stop()
+						return
+				}
+			}
+		}()
+
 		// Get response from Gemini with history
 		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage, history)
+		done <- true // Stop the ticker
+
 		if err != nil {
 			fmt.Printf("[Error] Gemini failure: %v\n", err)
 			
@@ -178,6 +195,9 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 			s.Sender.SendChatPresence(ctx, phone, false)
 			return
 		}
+
+		// Small delay to make it feel more natural if it was too fast
+		time.Sleep(1 * time.Second)
 
 		fmt.Printf("[AI-reply] Sending AI response to %s\n", phone)
 		_, err = s.Sender.SendTextMessage(ctx, phone, aiResponse)

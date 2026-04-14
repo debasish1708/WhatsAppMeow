@@ -3,6 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
 	"whatsmeow/models"
@@ -19,10 +22,10 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	// Using gemini-2.0-flash-lite for better quota availability in free tier
-	model := client.GenerativeModel("gemini-1.5-flash-latest")
+	// Using gemini-2.0-flash as confirmed by ListModels
+	model := client.GenerativeModel("gemini-2.5-flash")
 	
-	// Optional: Set a system instruction to keep it friendly like before
+	// System instruction to keep it friendly and concise
 	model.SystemInstruction = &genai.Content{
 		Parts: []genai.Part{genai.Text("You are a helpful WhatsApp assistant. Keep your responses concise and friendly.")},
 	}
@@ -34,32 +37,49 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 }
 
 func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string, history []models.MessageLog) (string, error) {
-	chat := s.Model.StartChat()
-	
-	// Convert history to genai.Content
-	for _, msg := range history {
-		role := "user"
-		if msg.Type == "sent" {
-			role = "model"
+	var lastErr error
+	maxRetries := 3
+
+	for i := 0; i < maxRetries; i++ {
+		chat := s.Model.StartChat()
+		
+		// Convert history to genai.Content
+		for _, msg := range history {
+			role := "user"
+			if msg.Type == "sent" {
+				role = "model"
+			}
+			chat.History = append(chat.History, &genai.Content{
+				Role: role,
+				Parts: []genai.Part{genai.Text(msg.Message)},
+			})
 		}
-		chat.History = append(chat.History, &genai.Content{
-			Role: role,
-			Parts: []genai.Part{genai.Text(msg.Message)},
-		})
-	}
 
-	resp, err := chat.SendMessage(ctx, genai.Text(userPrompt))
-	if err != nil {
-		return "", fmt.Errorf("Gemini error: %v", err)
-	}
-
-	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
-		if text, ok := resp.Candidates[0].Content.Parts[0].(genai.Text); ok {
-			return string(text), nil
+		resp, err := chat.SendMessage(ctx, genai.Text(userPrompt))
+		if err == nil {
+			if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
+				if text, ok := resp.Candidates[0].Content.Parts[0].(genai.Text); ok {
+					return string(text), nil
+				}
+			}
+			return "I'm not sure how to respond to that.", nil
 		}
+
+		lastErr = err
+		// Check for 429 (Rate Limit) error
+		if strings.Contains(err.Error(), "429") {
+			// Exponential backoff: 2s, 4s, 8s...
+			backoff := time.Duration(2<<(uint(i))) * time.Second
+			fmt.Printf("[Gemini] Quota exceeded, retrying in %v... (Attempt %d/%d)\n", backoff, i+1, maxRetries)
+			time.Sleep(backoff)
+			continue
+		}
+		
+		// If it's not a rate limit error (e.g., 404 or something else), don't retry
+		break
 	}
 
-	return "I'm not sure how to respond to that.", nil
+	return "", fmt.Errorf("Gemini error: %v", lastErr)
 }
 
 func (s *GeminiService) Close() {

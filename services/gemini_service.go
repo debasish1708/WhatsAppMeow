@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
+	"whatsmeow/models"
 )
 
 type GeminiService struct {
@@ -32,8 +33,22 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 	}, nil
 }
 
-func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string) (string, error) {
-	resp, err := s.Model.GenerateContent(ctx, genai.Text(userPrompt))
+func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string, history []models.MessageLog) (string, error) {
+	chat := s.Model.StartChat()
+	
+	// Convert history to genai.Content
+	for _, msg := range history {
+		role := "user"
+		if msg.Type == "sent" {
+			role = "model"
+		}
+		chat.History = append(chat.History, &genai.Content{
+			Role: role,
+			Parts: []genai.Part{genai.Text(msg.Message)},
+		})
+	}
+
+	resp, err := chat.SendMessage(ctx, genai.Text(userPrompt))
 	if err != nil {
 		return "", fmt.Errorf("Gemini error: %v", err)
 	}

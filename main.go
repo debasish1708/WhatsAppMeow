@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/joho/godotenv"
+	_ "modernc.org/sqlite"
 
 	"whatsmeow/handlers"
 	"whatsmeow/services"
@@ -32,6 +34,25 @@ func main() {
 
 	dsn := "file:data/whatsmeow.db?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 	
+	// Open DB for message history
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		panic(fmt.Errorf("failed to open database: %v", err))
+	}
+	defer db.Close()
+
+	// Create message_history table
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS message_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		phone TEXT,
+		message TEXT,
+		type TEXT, -- 'sent' or 'received'
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		panic(fmt.Errorf("failed to create message_history table: %v", err))
+	}
+
 	adapter, err := whatsapp.NewWhatsAppAdapter(dsn)
 	if err != nil {
 		panic(err)
@@ -53,7 +74,7 @@ func main() {
 		fmt.Println("[AI] WARNING: GEMINI_API_KEY not found. AI features will be disabled.")
 	}
 
-	msgService := services.NewMessagingService(msgSender, geminiService)
+	msgService := services.NewMessagingService(msgSender, geminiService, db)
 	
 	// Create the event dispatcher
 	whatsapp.NewEventDispatcher(adapter, msgService)

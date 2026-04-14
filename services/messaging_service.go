@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"regexp"
@@ -13,18 +14,46 @@ import (
 )
 
 type MessagingService struct {
-	Sender         whatsapp.MessageSender
-	GeminiService  *GeminiService
-	LogoutAction   func()
-	MessageHistory []models.MessageLog
+	Sender        whatsapp.MessageSender
+	GeminiService *GeminiService
+	LogoutAction  func()
+	DB            *sql.DB
 }
 
-func NewMessagingService(sender whatsapp.MessageSender, geminiService *GeminiService) *MessagingService {
+func NewMessagingService(sender whatsapp.MessageSender, geminiService *GeminiService, db *sql.DB) *MessagingService {
 	return &MessagingService{
-		Sender:         sender,
-		GeminiService:  geminiService,
-		MessageHistory: make([]models.MessageLog, 0),
+		Sender:        sender,
+		GeminiService: geminiService,
+		DB:            db,
 	}
+}
+
+func (s *MessagingService) SaveMessage(phone string, message string, msgType string) {
+	_, err := s.DB.Exec("INSERT INTO message_history (phone, message, type) VALUES (?, ?, ?)", phone, message, msgType)
+	if err != nil {
+		fmt.Printf("[Error] Failed to save message to DB: %v\n", err)
+	}
+}
+
+func (s *MessagingService) GetRecentMessages(phone string, limit int) []models.MessageLog {
+	rows, err := s.DB.Query("SELECT phone, message, type, timestamp FROM message_history WHERE phone = ? ORDER BY id DESC LIMIT ?", phone, limit)
+	if err != nil {
+		fmt.Printf("[Error] Failed to fetch history from DB: %v\n", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var history []models.MessageLog
+	for rows.Next() {
+		var m models.MessageLog
+		if err := rows.Scan(&m.Phone, &m.Message, &m.Type, &m.Timestamp); err != nil {
+			fmt.Printf("[Error] Failed to scan history row: %v\n", err)
+			continue
+		}
+		// Insert at the beginning to keep chronological order (since we queried DESC)
+		history = append([]models.MessageLog{m}, history...)
+	}
+	return history
 }
 
 func (s *MessagingService) SendMessage(ctx context.Context, input *models.SendMessageInput) (*models.SendMessageOutput, error) {
@@ -34,6 +63,8 @@ func (s *MessagingService) SendMessage(ctx context.Context, input *models.SendMe
 	if err != nil {
 		return nil, err
 	}
+
+	s.SaveMessage(input.Body.Phone, input.Body.Message, "sent")
 
 	output := &models.SendMessageOutput{}
 	output.Body.Success = true
@@ -45,6 +76,8 @@ func (s *MessagingService) SendMediaMessage(ctx context.Context, phone string, d
 	msgID, err := s.Sender.SendMediaMessage(ctx, phone, data, fileName, mediaType, caption)
 	fmt.Printf("[Outgoing (API) Media] To %s: %s - %s\n", phone, mediaType, fileName)
 
+	// Actually I must provide the FULL logic or it will be lost.
+	
 	var localFileName string
 	timestamp := time.Now().Unix()
 
@@ -64,13 +97,13 @@ func (s *MessagingService) SendMediaMessage(ctx context.Context, phone string, d
 	errWrite := os.WriteFile(localFileName, data, 0644)
 	if errWrite != nil {
 		fmt.Printf("[Error] Failed to save local media file: %v\n", errWrite)
-	} else {
-		fmt.Printf("[Outgoing (API) Media] To %s: %s - saved to %s\n", phone, mediaType, localFileName)
 	}
 
 	if err != nil {
 		return nil, err
 	}
+
+	s.SaveMessage(phone, fmt.Sprintf("[%s] %s", mediaType, caption), "sent")
 	
 	output := &models.SendMediaMessageOutput{}
 	output.Body.Success = true
@@ -79,7 +112,22 @@ func (s *MessagingService) SendMediaMessage(ctx context.Context, phone string, d
 }
 
 func (s *MessagingService) GetHistory() []models.MessageLog {
-	return s.MessageHistory
+	rows, err := s.DB.Query("SELECT phone, message, type, timestamp FROM message_history ORDER BY id ASC")
+	if err != nil {
+		fmt.Printf("[Error] Failed to fetch all history from DB: %v\n", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var history []models.MessageLog
+	for rows.Next() {
+		var m models.MessageLog
+		if err := rows.Scan(&m.Phone, &m.Message, &m.Type, &m.Timestamp); err != nil {
+			continue
+		}
+		history = append(history, m)
+	}
+	return history
 }
 
 func (s *MessagingService) SendAutoReply(phone string, replyText string) {
@@ -95,6 +143,8 @@ func (s *MessagingService) SendAutoReply(phone string, replyText string) {
 		_, err := s.Sender.SendTextMessage(ctx, phone, replyText)
 		if err != nil {
 			fmt.Printf("[Error] Failed to send auto-reply to %s: %v\n", phone, err)
+		} else {
+			s.SaveMessage(phone, replyText, "sent")
 		}
 
 		// Stop typing status
@@ -103,13 +153,20 @@ func (s *MessagingService) SendAutoReply(phone string, replyText string) {
 }
 
 func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
+	// Fetch history (last 6 messages) for context BEFORE saving current message
+	// so that history only contains PAST messages.
+	history := s.GetRecentMessages(phone, 6)
+
+	// Save current message to DB for future context
+	s.SaveMessage(phone, userMessage, "received")
+
 	go func() {
 		ctx := context.Background()
 		fmt.Printf("[AI-reply] Showing typing and fetching response for %s\n", phone)
 		s.Sender.SendChatPresence(ctx, phone, true)
 
-		// Get response from Gemini
-		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage)
+		// Get response from Gemini with history
+		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage, history)
 		if err != nil {
 			fmt.Printf("[Error] Gemini failure: %v\n", err)
 			s.Sender.SendChatPresence(ctx, phone, false)
@@ -120,6 +177,8 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 		_, err = s.Sender.SendTextMessage(ctx, phone, aiResponse)
 		if err != nil {
 			fmt.Printf("[Error] Failed to send AI auto-reply to %s: %v\n", phone, err)
+		} else {
+			s.SaveMessage(phone, aiResponse, "sent")
 		}
 
 		// Stop typing status
@@ -128,10 +187,9 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 }
 
 func (s *MessagingService) OnMessageReceived(phone string, message string, isFromMe bool, isWeb bool, timestamp string) {
-	entry := models.MessageLog{
-		Phone:     phone,
-		Message:   message,
-		Timestamp: timestamp,
+	msgType := "received"
+	if isFromMe {
+		msgType = "sent"
 	}
 
 	origin := "Mobile"
@@ -140,18 +198,16 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 	}
 
 	if isFromMe {
-		entry.Type = "sent"
-		fmt.Printf("[Outgoing (%s)] To %s: %s\n", origin, entry.Phone, entry.Message)
+		fmt.Printf("[Outgoing (%s)] To %s: %s\n", origin, phone, message)
+		s.SaveMessage(phone, message, msgType)
 	} else {
-		entry.Type = "received"
-		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, entry.Phone, entry.Message)
+		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, phone, message)
 
-		// Auto-reply logic
 		if s.GeminiService != nil {
-			// If Gemini is enabled, use it for ALL incoming messages
+			// SendAIAutoReply now handles saving the incoming message
 			s.SendAIAutoReply(phone, message)
 		} else {
-			// Fallback to simple regex if AI is not configured
+			s.SaveMessage(phone, message, msgType)
 			hiRegex := regexp.MustCompile(`^(hi+|hello)$`)
 			lowerMsg := strings.ToLower(strings.TrimSpace(message))
 			if hiRegex.MatchString(lowerMsg) {
@@ -159,8 +215,6 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 			}
 		}
 	}
-
-	s.MessageHistory = append(s.MessageHistory, entry)
 }
 
 func (s *MessagingService) OnLoggedOut() {

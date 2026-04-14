@@ -14,13 +14,15 @@ import (
 
 type MessagingService struct {
 	Sender         whatsapp.MessageSender
+	GeminiService  *GeminiService
 	LogoutAction   func()
 	MessageHistory []models.MessageLog
 }
 
-func NewMessagingService(sender whatsapp.MessageSender) *MessagingService {
+func NewMessagingService(sender whatsapp.MessageSender, geminiService *GeminiService) *MessagingService {
 	return &MessagingService{
 		Sender:         sender,
+		GeminiService:  geminiService,
 		MessageHistory: make([]models.MessageLog, 0),
 	}
 }
@@ -86,13 +88,38 @@ func (s *MessagingService) SendAutoReply(phone string, replyText string) {
 		fmt.Printf("[Auto-reply] Showing typing to %s\n", phone)
 		s.Sender.SendChatPresence(ctx, phone, true)
 
-		// Wait for 2 seconds to simulate typing
+		// Wait for 1 second to simulate typing
 		time.Sleep(1 * time.Second)
 
 		fmt.Printf("[Auto-reply] Sending %s to %s\n", replyText, phone)
 		_, err := s.Sender.SendTextMessage(ctx, phone, replyText)
 		if err != nil {
 			fmt.Printf("[Error] Failed to send auto-reply to %s: %v\n", phone, err)
+		}
+
+		// Stop typing status
+		s.Sender.SendChatPresence(ctx, phone, false)
+	}()
+}
+
+func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
+	go func() {
+		ctx := context.Background()
+		fmt.Printf("[AI-reply] Showing typing and fetching response for %s\n", phone)
+		s.Sender.SendChatPresence(ctx, phone, true)
+
+		// Get response from Gemini
+		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage)
+		if err != nil {
+			fmt.Printf("[Error] Gemini failure: %v\n", err)
+			s.Sender.SendChatPresence(ctx, phone, false)
+			return
+		}
+
+		fmt.Printf("[AI-reply] Sending AI response to %s\n", phone)
+		_, err = s.Sender.SendTextMessage(ctx, phone, aiResponse)
+		if err != nil {
+			fmt.Printf("[Error] Failed to send AI auto-reply to %s: %v\n", phone, err)
 		}
 
 		// Stop typing status
@@ -119,12 +146,17 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 		entry.Type = "received"
 		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, entry.Phone, entry.Message)
 
-		// Auto-reply logic using Regex
-		// Matches: hi, hii, hiii..., hello (case-insensitive due to lowerMsg)
-		hiRegex := regexp.MustCompile(`^(hi+|hello)$`)
-		lowerMsg := strings.ToLower(strings.TrimSpace(message))
-		if hiRegex.MatchString(lowerMsg) && entry.Phone == "918260646245" {
-			s.SendAutoReply(phone, "Hello")
+		// Auto-reply logic
+		if s.GeminiService != nil {
+			// If Gemini is enabled, use it for ALL incoming messages
+			s.SendAIAutoReply(phone, message)
+		} else {
+			// Fallback to simple regex if AI is not configured
+			hiRegex := regexp.MustCompile(`^(hi+|hello)$`)
+			lowerMsg := strings.ToLower(strings.TrimSpace(message))
+			if hiRegex.MatchString(lowerMsg) {
+				s.SendAutoReply(phone, "Hello! (AI is currently disabled)")
+			}
 		}
 	}
 

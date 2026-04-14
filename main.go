@@ -10,6 +10,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/joho/godotenv"
 
 	"whatsmeow/handlers"
 	"whatsmeow/services"
@@ -17,6 +18,12 @@ import (
 )
 
 func main() {
+	// Load .env file
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Warning: .env file not found. Falling back to system environment variables.")
+	}
+
 	// Create data and media directories if they don't exist
 	_ = os.MkdirAll("data", 0755)
 	_ = os.MkdirAll("media/images", 0755)
@@ -31,7 +38,22 @@ func main() {
 	}
 
 	msgSender := whatsapp.NewDefaultMessageSender(adapter)
-	msgService := services.NewMessagingService(msgSender)
+	
+	// Gemini AI Integration
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	var geminiService *services.GeminiService
+	if geminiKey != "" {
+		fmt.Println("[AI] Gemini API Key found, initializing Gemini service.")
+		var err error
+		geminiService, err = services.NewGeminiService(context.Background(), geminiKey)
+		if err != nil {
+			fmt.Printf("[AI] Error initializing Gemini: %v\n", err)
+		}
+	} else {
+		fmt.Println("[AI] WARNING: GEMINI_API_KEY not found. AI features will be disabled.")
+	}
+
+	msgService := services.NewMessagingService(msgSender, geminiService)
 	
 	// Create the event dispatcher
 	whatsapp.NewEventDispatcher(adapter, msgService)

@@ -19,8 +19,8 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	// Using gemini-flash-latest for best free-tier availability
-	model := client.GenerativeModel("gemini-flash-latest")
+	// Using gemini-2.0-flash-lite for better quota availability in free tier
+	model := client.GenerativeModel("gemini-1.5-flash-latest")
 	
 	// Optional: Set a system instruction to keep it friendly like before
 	model.SystemInstruction = &genai.Content{

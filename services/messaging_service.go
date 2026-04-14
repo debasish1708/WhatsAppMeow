@@ -169,6 +169,12 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage, history)
 		if err != nil {
 			fmt.Printf("[Error] Gemini failure: %v\n", err)
+			
+			// Optional: Notify user that AI is busy if it's a quota error
+			if strings.Contains(err.Error(), "429") {
+				s.Sender.SendTextMessage(ctx, phone, "I'm a bit overwhelmed with messages right now, but I'll be back shortly!")
+			}
+
 			s.Sender.SendChatPresence(ctx, phone, false)
 			return
 		}

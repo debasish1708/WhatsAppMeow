@@ -123,7 +123,7 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 		// Matches: hi, hii, hiii..., hello (case-insensitive due to lowerMsg)
 		hiRegex := regexp.MustCompile(`^(hi+|hello)$`)
 		lowerMsg := strings.ToLower(strings.TrimSpace(message))
-		if hiRegex.MatchString(lowerMsg) {
+		if hiRegex.MatchString(lowerMsg) && entry.Phone == "918260646245" {
 			s.SendAutoReply(phone, "Hello")
 		}
 	}

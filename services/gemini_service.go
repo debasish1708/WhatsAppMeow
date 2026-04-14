@@ -27,7 +27,7 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 	
 	// System instruction to keep it friendly and concise
 	model.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{genai.Text("You are a helpful WhatsApp assistant. Keep your responses concise and friendly.")},
+		Parts: []genai.Part{genai.Text("My name is Debasish Das. I am your friend here to help you out with any problem and give you the best suggestion for your problem and query. I will try to resolve your issues, and I am a helpful and kind natured person. If you do not know the answer to a question, respond with: 'Sorry, I am not aware of this. Please ask me another question.'")},
 	}
 
 	return &GeminiService{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -86,7 +87,7 @@ func (s *MessagingService) SendAutoReply(phone string, replyText string) {
 		s.Sender.SendChatPresence(ctx, phone, true)
 
 		// Wait for 2 seconds to simulate typing
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		fmt.Printf("[Auto-reply] Sending %s to %s\n", replyText, phone)
 		_, err := s.Sender.SendTextMessage(ctx, phone, replyText)
@@ -118,9 +119,11 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 		entry.Type = "received"
 		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, entry.Phone, entry.Message)
 
-		// Auto-reply logic
+		// Auto-reply logic using Regex
+		// Matches: hi, hii, hiii..., hello (case-insensitive due to lowerMsg)
+		hiRegex := regexp.MustCompile(`^(hi+|hello)$`)
 		lowerMsg := strings.ToLower(strings.TrimSpace(message))
-		if lowerMsg == "hi" || lowerMsg == "hii" {
+		if hiRegex.MatchString(lowerMsg) {
 			s.SendAutoReply(phone, "Hello")
 		}
 	}

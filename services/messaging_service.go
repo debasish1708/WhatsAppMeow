@@ -199,7 +199,7 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 		// Small delay to make it feel more natural if it was too fast
 		time.Sleep(1 * time.Second)
 
-		fmt.Printf("[AI-reply] Sending AI response to %s\n", phone)
+		fmt.Printf("[AI-reply] Sending AI response to %s: %s\n", phone, aiResponse)
 		_, err = s.Sender.SendTextMessage(ctx, phone, aiResponse)
 		if err != nil {
 			fmt.Printf("[Error] Failed to send AI auto-reply to %s: %v\n", phone, err)

@@ -1,0 +1,165 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+}
+.tabs {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+.tab-btn {
+    padding: 10px 20px;
+    margin: 0 5px;
+    border: none;
+    background-color: #ddd;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 5px;
+}
+.tab-btn.active {
+    background-color: #25D366;
+    color: white;
+}
+.container {
+    background: white;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.tab-content.hidden {
+    display: none;
+}
+.hidden {
+    display: none !important;
+}
+h1, h2 {
+    color: #333;
+    text-align: center;
+}
+#status-container {
+    text-align: center;
+    margin-bottom: 20px;
+}
+#login-btn, #send-btn {
+    background-color: #25D366;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-size: 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+#login-btn:hover, #send-btn:hover {
+    background-color: #1ebe57;
+}
+#qr-container {
+    text-align: center;
+}
+#qr-image {
+    max-width: 250px;
+    margin: 20px auto;
+}
+.success-icon {
+    font-size: 50px;
+    color: #25D366;
+    text-align: center;
+}
+#success-container {
+    text-align: center;
+}
+.form-group {
+    margin-bottom: 15px;
+}
+label {
+    display: block;
+    margin-bottom: 5px;
+    color: #555;
+}
+.input-group {
+    display: flex;
+    align-items: center;
+}
+.prefix {
+    background: #eee;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-right: none;
+    border-radius: 5px 0 0 5px;
+    color: #555;
+}
+input[type="text"], textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 0 5px 5px 0;
+    box-sizing: border-box;
+}
+textarea {
+    border-radius: 5px;
+    resize: vertical;
+}
+#history-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 10px;
+    border-radius: 5px;
+    background: #fafafa;
+    margin-bottom: 10px;
+}
+.history-item {
+    background: white;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.history-item.sent {
+    border-left: 4px solid #25D366;
+}
+.history-item.failed {
+    border-left: 4px solid #ff4d4d;
+}
+.history-item .phone {
+    font-weight: bold;
+    font-size: 12px;
+    color: #888;
+}
+.history-item .msg {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #333;
+    white-space: pre-wrap;
+}
+.history-item .status {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 5px;
+    text-align: right;
+}
+.small-btn {
+    background: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.logout-btn {
+    background-color: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 20px;
+}
+.logout-btn:hover {
+    background-color: #e60000;
+}

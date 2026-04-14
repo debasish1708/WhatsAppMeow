@@ -229,6 +229,10 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 	} else {
 		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, phone, message)
 
+		// only allow for testing numbers
+		if phone != "918763347122" && phone != "918260646245" && phone != "919999999999" {
+			return;
+		}
 		if s.GeminiService != nil {
 			// SendAIAutoReply now handles saving the incoming message
 			s.SendAIAutoReply(phone, message)

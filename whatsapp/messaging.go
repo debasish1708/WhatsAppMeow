@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
@@ -50,11 +51,14 @@ func (s *DefaultMessageSender) SendTextMessage(ctx context.Context, to string, m
 	if err != nil {
 		return "", err
 	}
+		return resp.ID, nil
+	}
 
-	return resp.ID, nil
-}
+	func (s *DefaultMessageSender) MarkRead(ctx context.Context, messageID string, chatJID types.JID, senderJID types.JID) error {
+		return s.Adapter.Client.MarkRead(ctx, []types.MessageID{messageID}, time.Now(), chatJID, senderJID)
+	}
 
-func (s *DefaultMessageSender) SendChatPresence(ctx context.Context, to string, isTyping bool) error {
+	func (s *DefaultMessageSender) SendChatPresence(ctx context.Context, to string, isTyping bool) error {
 	if !s.Adapter.Client.IsConnected() || !s.Adapter.Client.IsLoggedIn() {
 		return fmt.Errorf("WhatsApp is not logged in or connected")
 	}

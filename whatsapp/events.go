@@ -123,7 +123,7 @@ func (d *EventDispatcher) HandleEvent(evt interface{}) {
 			// }
 
 			if d.Listener != nil {
-				d.Listener.OnMessageReceived(phone, msgContent, v.Info.IsFromMe, isWeb, timestamp)
+				d.Listener.OnMessageReceived(phone, msgContent, v.Info.IsFromMe, isWeb, timestamp, v.Info.ID, chatJID, senderJID)
 			}
 		}
 

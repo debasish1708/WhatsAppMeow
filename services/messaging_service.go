@@ -11,6 +11,8 @@ import (
 
 	"whatsmeow/models"
 	"whatsmeow/whatsapp"
+
+	"go.mau.fi/whatsmeow/types"
 )
 
 type MessagingService struct {
@@ -212,7 +214,7 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 	}()
 }
 
-func (s *MessagingService) OnMessageReceived(phone string, message string, isFromMe bool, isWeb bool, timestamp string) {
+func (s *MessagingService) OnMessageReceived(phone string, message string, isFromMe bool, isWeb bool, timestamp string, msgID string, chatJID types.JID, senderJID types.JID) {
 	msgType := "received"
 	if isFromMe {
 		msgType = "sent"
@@ -231,8 +233,15 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 
 		// only allow for testing numbers
 		if phone != "918763347122" && phone != "918260646245" && phone != "919574308611" && phone != "917815030574" {
-			return;
+			return
 		}
+
+		// Mark as read immediately (Blue Tick)
+		err := s.Sender.MarkRead(context.Background(), msgID, chatJID, senderJID)
+		if err != nil {
+			fmt.Printf("[Error] Failed to mark message as read: %v\n", err)
+		}
+
 		if s.GeminiService != nil {
 			// SendAIAutoReply now handles saving the incoming message
 			s.SendAIAutoReply(phone, message)

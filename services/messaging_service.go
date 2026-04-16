@@ -67,12 +67,12 @@ func (s *MessagingService) DeleteAllMedia() error {
 
 // HandleCommand processes commands sent to the authorized number
 func (s *MessagingService) HandleCommand(phone string, message string) bool {
-	cmdParts := strings.Fields(strings.ToLower(strings.TrimSpace(message)))
+	cmdParts := strings.Fields(strings.TrimSpace(message))
 	if len(cmdParts) == 0 {
 		return false
 	}
 
-	cmd := cmdParts[0]
+	cmd := strings.ToLower(cmdParts[0])
 
 	switch cmd {
 	case "delete_history":
@@ -136,8 +136,83 @@ func (s *MessagingService) HandleCommand(phone string, message string) bool {
 			s.SendAutoReply(phone, reply)
 		}
 		return true
+	case "get_all_prompt":
+		prompts, err := s.GetAllSystemPrompts()
+		if err != nil {
+			s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to fetch system prompts: %v", err))
+		} else if len(prompts) == 0 {
+			s.SendAutoReply(phone, "ℹ️ No custom system prompts found.")
+		} else {
+			reply := "📋 *Custom System Prompts:*\n"
+			for p, prompt := range prompts {
+				reply += fmt.Sprintf("📱 *%s*:\n📝 %s\n\n", p, prompt)
+			}
+			s.SendAutoReply(phone, reply)
+		}
+		return true
+	case "assign":
+		if len(cmdParts) >= 3 && strings.ToLower(cmdParts[1]) == "prompt" {
+			targetPhone := cmdParts[2]
+			// Join the rest of the parts as the prompt
+			prompt := strings.Join(cmdParts[3:], " ")
+			if err := s.SetSystemPrompt(targetPhone, prompt); err != nil {
+				s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to assign prompt to %s: %v", targetPhone, err))
+			} else {
+				s.SendAutoReply(phone, fmt.Sprintf("✅ Custom prompt assigned to %s.", targetPhone))
+			}
+			return true
+		}
+	case "delete":
+		if len(cmdParts) >= 3 && strings.ToLower(cmdParts[1]) == "prompt" {
+			targetPhone := cmdParts[2]
+			if err := s.DeleteSystemPrompt(targetPhone); err != nil {
+				s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to delete prompt for %s: %v", targetPhone, err))
+			} else {
+				s.SendAutoReply(phone, fmt.Sprintf("✅ Custom prompt deleted for %s. Reverting to default.", targetPhone))
+			}
+			return true
+		}
 	}
 	return false
+}
+
+func (s *MessagingService) SetSystemPrompt(phone string, prompt string) error {
+	_, err := s.DB.Exec("INSERT OR REPLACE INTO system_prompts (phone, prompt, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", phone, prompt)
+	return err
+}
+
+func (s *MessagingService) DeleteSystemPrompt(phone string) error {
+	_, err := s.DB.Exec("DELETE FROM system_prompts WHERE phone = ?", phone)
+	return err
+}
+
+func (s *MessagingService) GetAllSystemPrompts() (map[string]string, error) {
+	rows, err := s.DB.Query("SELECT phone, prompt FROM system_prompts")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	prompts := make(map[string]string)
+	for rows.Next() {
+		var phone, prompt string
+		if err := rows.Scan(&phone, &prompt); err == nil {
+			prompts[phone] = prompt
+		}
+	}
+	return prompts, nil
+}
+
+func (s *MessagingService) GetSystemPrompt(phone string) string {
+	var prompt string
+	err := s.DB.QueryRow("SELECT prompt FROM system_prompts WHERE phone = ?", phone).Scan(&prompt)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			fmt.Printf("[Error] Failed to fetch system prompt for %s: %v\n", phone, err)
+		}
+		return ""
+	}
+	return prompt
 }
 
 func (s *MessagingService) IsUserActive(phone string) bool {
@@ -322,8 +397,11 @@ func (s *MessagingService) SendAIAutoReply(phone string, userMessage string) {
 			}
 		}()
 
+		// Get custom system prompt for this user if it exists
+		systemPrompt := s.GetSystemPrompt(phone)
+
 		// Get response from Gemini with history
-		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage, history)
+		aiResponse, err := s.GeminiService.GetAIResponse(ctx, userMessage, history, systemPrompt)
 		done <- true // Stop the ticker
 
 		if err != nil {

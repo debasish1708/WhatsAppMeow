@@ -36,12 +36,22 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 	}, nil
 }
 
-func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string, history []models.MessageLog) (string, error) {
+func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string, history []models.MessageLog, systemPrompt string) (string, error) {
 	var lastErr error
 	maxRetries := 3
 
+	// If a custom system prompt is provided, we use a new model instance for this specific request
+	// to avoid modifying the base model's system instructions in a concurrent environment.
+	model := s.Model
+	if systemPrompt != "" {
+		model = s.Client.GenerativeModel("gemini-2.0-flash") // Matching base model logic or choosing a stable version
+		model.SystemInstruction = &genai.Content{
+			Parts: []genai.Part{genai.Text(systemPrompt)},
+		}
+	}
+
 	for i := 0; i < maxRetries; i++ {
-		chat := s.Model.StartChat()
+		chat := model.StartChat()
 		
 		// Convert history to genai.Content
 		for _, msg := range history {

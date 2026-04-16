@@ -75,6 +75,15 @@ func main() {
 		panic(fmt.Errorf("failed to create active_users table: %v", err))
 	}
 
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS system_prompts (
+		phone TEXT PRIMARY KEY,
+		prompt TEXT,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		panic(fmt.Errorf("failed to create system_prompts table: %v", err))
+	}
+
 	// Pre-populate with initial authorized numbers if empty
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM active_users").Scan(&count)

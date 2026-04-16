@@ -67,7 +67,13 @@ func (s *MessagingService) DeleteAllMedia() error {
 
 // HandleCommand processes commands sent to the authorized number
 func (s *MessagingService) HandleCommand(phone string, message string) bool {
-	cmd := strings.ToLower(strings.TrimSpace(message))
+	cmdParts := strings.Fields(strings.ToLower(strings.TrimSpace(message)))
+	if len(cmdParts) == 0 {
+		return false
+	}
+
+	cmd := cmdParts[0]
+
 	switch cmd {
 	case "delete_history":
 		if err := s.DeleteAllHistory(); err == nil {
@@ -92,8 +98,83 @@ func (s *MessagingService) HandleCommand(phone string, message string) bool {
 			}
 		}()
 		return true
+	case "activate":
+		if len(cmdParts) < 2 {
+			s.SendAutoReply(phone, "❌ Usage: activate {mobile_number}")
+			return true
+		}
+		targetPhone := cmdParts[1]
+		if err := s.ActivateUser(targetPhone); err != nil {
+			s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to activate %s: %v", targetPhone, err))
+		} else {
+			s.SendAutoReply(phone, fmt.Sprintf("✅ User %s has been activated.", targetPhone))
+		}
+		return true
+	case "deactivate":
+		if len(cmdParts) < 2 {
+			s.SendAutoReply(phone, "❌ Usage: deactivate {mobile_number}")
+			return true
+		}
+		targetPhone := cmdParts[1]
+		if err := s.DeactivateUser(targetPhone); err != nil {
+			s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to deactivate %s: %v", targetPhone, err))
+		} else {
+			s.SendAutoReply(phone, fmt.Sprintf("✅ User %s has been deactivated.", targetPhone))
+		}
+		return true
+	case "list_activate":
+		users, err := s.GetActiveUsers()
+		if err != nil {
+			s.SendAutoReply(phone, fmt.Sprintf("❌ Failed to fetch active users: %v", err))
+		} else if len(users) == 0 {
+			s.SendAutoReply(phone, "ℹ️ No active users found.")
+		} else {
+			reply := "📋 *Active Users:*\n"
+			for i, u := range users {
+				reply += fmt.Sprintf("%d. %s\n", i+1, u)
+			}
+			s.SendAutoReply(phone, reply)
+		}
+		return true
 	}
 	return false
+}
+
+func (s *MessagingService) IsUserActive(phone string) bool {
+	var exists bool
+	err := s.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM active_users WHERE phone = ?)", phone).Scan(&exists)
+	if err != nil {
+		fmt.Printf("[Error] Failed to check active status for %s: %v\n", phone, err)
+		return false
+	}
+	return exists
+}
+
+func (s *MessagingService) ActivateUser(phone string) error {
+	_, err := s.DB.Exec("INSERT OR REPLACE INTO active_users (phone) VALUES (?)", phone)
+	return err
+}
+
+func (s *MessagingService) DeactivateUser(phone string) error {
+	_, err := s.DB.Exec("DELETE FROM active_users WHERE phone = ?", phone)
+	return err
+}
+
+func (s *MessagingService) GetActiveUsers() ([]string, error) {
+	rows, err := s.DB.Query("SELECT phone FROM active_users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []string
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err == nil {
+			users = append(users, u)
+		}
+	}
+	return users, nil
 }
 
 func (s *MessagingService) GetRecentMessages(phone string, limit int) []models.MessageLog {
@@ -295,8 +376,8 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 	} else {
 		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, phone, message)
 
-		// only allow for testing numbers
-		if phone != "918763347122" && phone != "918260646245" && phone != "919574308611" && phone != "917815030574" {
+		// Dynamic active user check
+		if !s.IsUserActive(phone) {
 			return
 		}
 

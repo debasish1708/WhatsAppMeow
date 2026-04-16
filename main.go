@@ -55,7 +55,7 @@ func main() {
 	}
 	defer db.Close()
 
-	// Create table
+	// Create tables
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS message_history (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		phone TEXT,
@@ -64,7 +64,26 @@ func main() {
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`)
 	if err != nil {
-		panic(fmt.Errorf("failed to create table: %v", err))
+		panic(fmt.Errorf("failed to create message_history table: %v", err))
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS active_users (
+		phone TEXT PRIMARY KEY,
+		added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		panic(fmt.Errorf("failed to create active_users table: %v", err))
+	}
+
+	// Pre-populate with initial authorized numbers if empty
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM active_users").Scan(&count)
+	if err == nil && count == 0 {
+		initialUsers := []string{"918763347122", "918260646245", "919574308611", "917815030574"}
+		for _, phone := range initialUsers {
+			_, _ = db.Exec("INSERT INTO active_users (phone) VALUES (?)", phone)
+		}
+		fmt.Println("[DB] Pre-populated active_users with initial numbers.")
 	}
 
 	// ================================

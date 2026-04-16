@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -35,6 +36,64 @@ func (s *MessagingService) SaveMessage(phone string, message string, msgType str
 	if err != nil {
 		fmt.Printf("[Error] Failed to save message to DB: %v\n", err)
 	}
+}
+
+func (s *MessagingService) DeleteAllHistory() error {
+	_, err := s.DB.Exec("DELETE FROM message_history")
+	if err != nil {
+		return fmt.Errorf("failed to delete history: %v", err)
+	}
+	fmt.Println("[Command] All message history deleted.")
+	return nil
+}
+
+func (s *MessagingService) DeleteAllMedia() error {
+	mediaDirs := []string{"media/images", "media/videos", "media/documents"}
+	for _, dir := range mediaDirs {
+		files, err := filepath.Glob(filepath.Join(dir, "*"))
+		if err != nil {
+			fmt.Printf("[Error] Failed to glob media directory %s: %v\n", dir, err)
+			continue
+		}
+		for _, f := range files {
+			if err := os.Remove(f); err != nil {
+				fmt.Printf("[Error] Failed to delete media file %s: %v\n", f, err)
+			}
+		}
+	}
+	fmt.Println("[Command] All media files deleted.")
+	return nil
+}
+
+// HandleCommand processes commands sent to the authorized number
+func (s *MessagingService) HandleCommand(phone string, message string) bool {
+	cmd := strings.ToLower(strings.TrimSpace(message))
+	switch cmd {
+	case "delete_history":
+		if err := s.DeleteAllHistory(); err == nil {
+			s.SendAutoReply(phone, "✅ All conversation history has been deleted.")
+		} else {
+			s.SendAutoReply(phone, "❌ Failed to delete conversation history.")
+		}
+		return true
+	case "delete_media":
+		if err := s.DeleteAllMedia(); err == nil {
+			s.SendAutoReply(phone, "✅ All media files have been deleted.")
+		} else {
+			s.SendAutoReply(phone, "❌ Failed to delete media files.")
+		}
+		return true
+	case "logout_me":
+		s.SendAutoReply(phone, "👋 Logging out... The device will be unlinked in 2 seconds.")
+		go func() {
+			time.Sleep(2 * time.Second)
+			if s.LogoutAction != nil {
+				s.LogoutAction()
+			}
+		}()
+		return true
+	}
+	return false
 }
 
 func (s *MessagingService) GetRecentMessages(phone string, limit int) []models.MessageLog {
@@ -228,6 +287,11 @@ func (s *MessagingService) OnMessageReceived(phone string, message string, isFro
 	if isFromMe {
 		fmt.Printf("[Outgoing (%s)] To %s: %s\n", origin, phone, message)
 		s.SaveMessage(phone, message, msgType)
+
+		// Command Handling for Outgoing messages to authorized number
+		if phone == "917815030574" {
+			s.HandleCommand(phone, message)
+		}
 	} else {
 		fmt.Printf("[Incoming (%s)] From %s: %s\n", origin, phone, message)
 

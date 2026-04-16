@@ -22,8 +22,8 @@ func NewGeminiService(ctx context.Context, apiKey string) (*GeminiService, error
 		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	// Using gemini-1.5-flash which has a more stable quota for free tier
-	model := client.GenerativeModel("gemini-1.5-flash")
+	// Using gemini-flash-latest for stable quota and availability
+	model := client.GenerativeModel("gemini-flash-latest")
 	
 	// System instruction to maintain a human persona and not identify as an AI
 	model.SystemInstruction = &genai.Content{
@@ -44,7 +44,7 @@ func (s *GeminiService) GetAIResponse(ctx context.Context, userPrompt string, hi
 	// to avoid modifying the base model's system instructions in a concurrent environment.
 	model := s.Model
 	if systemPrompt != "" {
-		model = s.Client.GenerativeModel("gemini-1.5-flash") // Using stable 1.5-flash for custom prompts
+		model = s.Client.GenerativeModel("gemini-flash-latest") 
 		model.SystemInstruction = &genai.Content{
 			Parts: []genai.Part{genai.Text(systemPrompt)},
 		}

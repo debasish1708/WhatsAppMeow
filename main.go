@@ -88,7 +88,7 @@ func main() {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM active_users").Scan(&count)
 	if err == nil && count == 0 {
-		initialUsers := []string{"918763347122", "918260646245", "919574308611", "917815030574"}
+		initialUsers := []string{"917815030574"}
 		for _, phone := range initialUsers {
 			_, _ = db.Exec("INSERT INTO active_users (phone) VALUES (?)", phone)
 		}

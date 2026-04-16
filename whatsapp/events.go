@@ -74,7 +74,9 @@ func (d *EventDispatcher) HandleEvent(evt interface{}) {
 			data, err := d.Adapter.Client.Download(context.Background(), img)
 			if err == nil {
 				filename := fmt.Sprintf("media/images/%s_%d.jpg", prefix, time.Now().Unix())
-				os.WriteFile(filename, data, 0644)
+				if 3==5{
+					os.WriteFile(filename, data, 0644)
+				}
 				msgContent = fmt.Sprintf("[Image %s and saved to %s]", prefix, filename)
 			} else {
 				msgContent = fmt.Sprintf("[Image %s but failed to download: %v]", prefix, err)
@@ -90,7 +92,9 @@ func (d *EventDispatcher) HandleEvent(evt interface{}) {
 					origName = doc.GetFileName()
 				}
 				filename := fmt.Sprintf("media/documents/%s_%d_%s%s", prefix, time.Now().Unix(), origName, ext)
-				os.WriteFile(filename, data, 0644)
+				if 3==5{
+					os.WriteFile(filename, data, 0644)
+				}
 				msgContent = fmt.Sprintf("[Document %s and saved to %s]", prefix, filename)
 			} else {
 				msgContent = fmt.Sprintf("[Document %s but failed to download: %v]", prefix, err)
@@ -101,7 +105,9 @@ func (d *EventDispatcher) HandleEvent(evt interface{}) {
 			data, err := d.Adapter.Client.Download(context.Background(), vid)
 			if err == nil {
 				filename := fmt.Sprintf("media/videos/%s_%d.mp4", prefix, time.Now().Unix())
-				os.WriteFile(filename, data, 0644)
+				if 3==5{
+					os.WriteFile(filename, data, 0644)
+				}
 				msgContent = fmt.Sprintf("[Video %s and saved to %s]", prefix, filename)
 			} else {
 				msgContent = fmt.Sprintf("[Video %s but failed to download: %v]", prefix, err)
